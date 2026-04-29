@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#222222">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>DSR Store Performance Manual V2</title>
+<style>
+body{font-family:Arial;margin:0;background:#f5f5f5}
+.nav{display:flex;background:#222}
+.nav button{flex:1;padding:12px;color:#fff;background:#222;border:none;cursor:pointer}
+.nav button.active{background:#666}
+.tab{display:none;padding:15px}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{border:1px solid #999;padding:4px;text-align:center;font-size:12px}
+th{background:#d9d9d9}
+.title{font-weight:bold;font-size:18px;text-align:center;background:#cfcfcf}
+.sub{background:#e6e6e6;font-weight:bold}
+input[type=number],input[type=text]{width:100%;box-sizing:border-box;text-align:center;border:none;padding:4px}
+.table-container{width:100%;overflow-x:auto}
+#tbl{min-width:1200px}
+.toggleBtn{background:#444;color:#fff;padding:10px;border:none;cursor:pointer;width:100%;margin-bottom:8px}
+#targetPanel{display:none;background:#fff;padding:10px;border:1px solid #999;margin-bottom:10px}
+.adjTable td,.adjTable th{padding:8px}
+@media (max-width:768px){
+ body{font-size:12px}
+ .tab{padding:6px}
+ .nav button{padding:10px;font-size:12px}
+ th,td{font-size:10px;padding:3px;white-space:nowrap}
+ input[type=number],input[type=text]{font-size:10px;padding:3px;min-width:70px}
+ #tbl{min-width:1350px}
+ #summary{font-size:11px!important;line-height:1.5}
+}
+</style>
+</head>
+<body>
+<div class="nav">
+<button onclick="openTab('master')">Master Data</button>
+<button onclick="openTab('system')">System</button>
+</div>
+
+<div id="master" class="tab">
+
+<button class="toggleBtn" onclick="toggleMasterPanel()">SHOW / HIDE MASTER SETTINGS</button>
+
+<div id="masterPanel" style="display:none;background:#fff;padding:10px;border:1px solid #999;margin-bottom:10px">
+<table class="adjTable" style="width:100%">
+<tr><th>Master Setup</th><th>Value</th></tr>
+<tr><td>Month</td><td><input type="text" id="monthInput" value="April" onchange="saveMeta()"></td></tr>
+<tr><td>Year</td><td><input type="number" id="yearInput" value="2026" onchange="saveMeta()"></td></tr>
+<tr><td>Number of Days</td><td><input type="number" id="daysInput" value="31" min="1" max="31" onchange="generateRows()"></td></tr>
+<tr><td>Total Sales Quota</td><td><input type="text" id="quotaInput" value="1,000,000.00" onfocus="rawEdit(this)" onchange="headerVal(this,'quotaInput')"></td></tr>
+<tr><td>Target GP Quota</td><td><input type="text" id="gpQuotaInput" value="800,000.00" onfocus="rawEdit(this)" onchange="headerVal(this,'gpQuotaInput')"></td></tr>
+</table>
+</div>
+
+
+<button class="toggleBtn" onclick="toggleTargetPanel()">SHOW / HIDE TARGET ADJUSTMENTS</button>
+
+<div id="targetPanel" style="display:none;background:#fff;padding:10px;border:1px solid #999;margin-bottom:10px">
+<table class="adjTable" style="width:100%;background:#fff">
+<tr><th>Personnel Setup</th><th>Number</th><th>Allocation %</th></tr>
+<tr><td>Doctors</td><td><input type="number" id="doctorQty" value="1" onchange="recomputeAll()"></td><td><input type="number" id="doctorPct" value="60" onchange="recomputeAll()"></td></tr>
+<tr><td>CCS</td><td><input type="number" id="ccsQty" value="1" onchange="recomputeAll()"></td><td><input type="number" id="ccsPct" value="25" onchange="recomputeAll()"></td></tr>
+<tr><td>CRO</td><td><input type="number" id="croQty" value="1" onchange="recomputeAll()"></td><td><input type="number" id="croPct" value="10" onchange="recomputeAll()"></td></tr>
+<tr><td>Cashier</td><td><input type="number" id="cashierQty" value="1" onchange="recomputeAll()"></td><td><input type="number" id="cashierPct" value="5" onchange="recomputeAll()"></td></tr>
+<tr><td>Stock Clerk</td><td><input type="number" id="stockQty" value="1" onchange="recomputeAll()"></td><td><input type="number" id="stockPct" value="5" onchange="recomputeAll()"></td></tr>
+</table>
+</div>
+
+<button class="toggleBtn" onclick="downloadXLS()">DOWNLOAD</button>
+
+<div class="table-container">
+<table id="tbl"><thead>
+<tr><th colspan="14" class="title">STORE PERFORMANCE</th></tr>
+<tr><th colspan="8" class="sub">Sales Performance (Current Year vs Last Year)</th><th colspan="6" class="sub">Gross Profit Performance (Current Year vs Last Year)</th></tr>
+<tr><th>Series</th><th>NS</th><th>RS</th><th>MTD RS</th><th>RS LY</th><th>MTD RS LY</th><th>MTD Growth</th><th>Target Sales</th><th>GP</th><th>MTD GP</th><th>GP LY</th><th>MTD GP LY</th><th>MTD GP Growth</th><th>Target GP</th></tr>
+</thead><tbody></tbody></table>
+</div>
+<div id="summary" style="margin-top:15px;background:#fff;padding:10px;border:1px solid #999;font-size:13px"></div>
+</div>
+<div id="system" class="tab">
+<button onclick="backup()">Backup</button>
+<button onclick="restoreData()">Restore</button>
+<button onclick="resetData()">Reset</button>
+<input type="file" id="restoreFile">
+</div>
+<script>
+let data=[];
+function openTab(id){document.querySelectorAll('.tab').forEach(t=>t.style.display='none');document.getElementById(id).style.display='block';}
+function toggleTargetPanel(){
+ let p=document.getElementById('targetPanel');
+ p.style.display=p.style.display==='none'?'block':'none';
+}
+
+function toggleMasterPanel(){
+ let p=document.getElementById('masterPanel');
+ p.style.display=p.style.display==='none'?'block':'none';
+}
+function saveMeta(){localStorage.setItem('monthInput',monthInput.value);localStorage.setItem('yearInput',yearInput.value);}
+function generateRows(){let days=Number(daysInput.value)||31;if(days>31)days=31;data=[];for(let i=1;i<=days;i++){data.push({series:i,ns:0,rs:0,rsLY:0,gp:0,gpLY:0});}recomputeAll();}
+function recomputeAll(){
+ let totalQuota=Number(String(quotaInput.value).replace(/,/g,''))||0;
+ let gpQuota=Number(String(gpQuotaInput.value).replace(/,/g,''))||0;
+ let days=Number(daysInput.value)||31;
+ let mtdRS=0,mtdRSLY=0,mtdGP=0,mtdGPLY=0;
+ data.forEach((d,i)=>{
+  mtdRS+=Number(d.rs)||0; mtdRSLY+=Number(d.rsLY)||0; mtdGP+=Number(d.gp)||0; mtdGPLY+=Number(d.gpLY)||0;
+  d.mtdRS=mtdRS; d.mtdRSLY=mtdRSLY; d.mtdGP=mtdGP; d.mtdGPLY=mtdGPLY;
+  d.growth=mtdRSLY?((mtdRS-mtdRSLY)/mtdRSLY)*100:0;
+  d.gpGrowth=mtdGPLY?((mtdGP-mtdGPLY)/mtdGPLY)*100:0;
+  let remainDays=days-i;
+  let prevRS=i===0?0:data[i-1].mtdRS;
+  let prevGP=i===0?0:data[i-1].mtdGP;
+  d.targetSales=(remainDays>0)?Math.max((totalQuota-prevRS)/remainDays,0):0;
+  d.targetGP=(remainDays>0)?Math.max((gpQuota-prevGP)/remainDays,0):0;
+ });
+ saveAll(); render();
+}
+function render(){
+ const tbody=document.querySelector('#tbl tbody'); tbody.innerHTML='';
+let lastEncodedIndex=data.map((r,idx)=>({r,idx}))
+.filter(x=>Number(x.r.rs)>0||Number(x.r.gp)>0||Number(x.r.ns)>0)
+.map(x=>x.idx).pop();
+
+let activeRow = lastEncodedIndex!=null ? data[lastEncodedIndex] : data[0];
+let nextRow = lastEncodedIndex!=null&&data[lastEncodedIndex+1] ? data[lastEncodedIndex+1] : data[0];
+
+let rsAch = (Number(activeRow.mtdRS||0) / (Number(String(quotaInput.value).replace(/,/g,''))||1))*100;
+let gpAch = (Number(activeRow.mtdGP||0) / (Number(String(gpQuotaInput.value).replace(/,/g,''))||1))*100;
+
+let rowRsGrowth = Number(activeRow.rsLY||0) ? ((Number(activeRow.rs||0)-Number(activeRow.rsLY||0))/Number(activeRow.rsLY||0))*100 : 0;
+let rowGpGrowth = Number(activeRow.gpLY||0) ? ((Number(activeRow.gp||0)-Number(activeRow.gpLY||0))/Number(activeRow.gpLY||0))*100 : 0;
+ data.forEach((d,i)=>{tbody.innerHTML += `<tr><td>${d.series}</td><td><input type='text' value='${fmt(d.ns)}' onfocus='rawEdit(this)' onchange='updateVal(${i},"ns",this.value,this)'></td><td><input type='text' value='${fmt(d.rs)}' onfocus='rawEdit(this)' onchange='updateVal(${i},"rs",this.value,this)'></td><td>${fmt(d.mtdRS)}</td><td><input type='text' value='${fmt(d.rsLY)}' onfocus='rawEdit(this)' onchange='updateVal(${i},"rsLY",this.value,this)'></td><td>${fmt(d.mtdRSLY)}</td><td>${d.growth.toFixed(0)}%</td><td>${fmt(d.targetSales)}</td><td><input type='text' value='${fmt(d.gp)}' onfocus='rawEdit(this)' onchange='updateVal(${i},"gp",this.value,this)'></td><td>${fmt(d.mtdGP)}</td><td><input type='text' value='${fmt(d.gpLY)}' onfocus='rawEdit(this)' onchange='updateVal(${i},"gpLY",this.value,this)'></td><td>${fmt(d.mtdGPLY)}</td><td>${d.gpGrowth.toFixed(0)}%</td><td>${fmt(d.targetGP)}</td></tr>`;});
+ function perHead(target,pct,qty){return ((target*(pct/100))/(qty||1));}
+ let s=(nextRow?.targetSales||0)*1.12,
+    g=nextRow?.targetGP||0;
+ summary.innerHTML=`<b>282 EO SM CITY ROXAS SALES TARGETS — ${monthInput.value} ${yearInput.value}</b><br>DATE: ${nextRow?.series||1}<br><br>
+ <b>Daily Required Sales To Hit RS Quota:</b> ${fmt(s)}<br>
+ <b>Daily Required GP To Hit GP Quota:</b> ${fmt(g)}<br><br>
+ <b>GROSS SALES TARGET PER STAFF</b><br>
+ Doctor: ${fmt(perHead(s,doctorPct.value,doctorQty.value))}<br>
+ CCS: ${fmt(perHead(s,ccsPct.value,ccsQty.value))}<br>
+ CRO: ${fmt(perHead(s,croPct.value,croQty.value))}<br>
+ Cashier: ${fmt(perHead(s,cashierPct.value,cashierQty.value))}<br>
+ Stock Clerk: ${fmt(perHead(s,stockPct.value,stockQty.value))}<br><br>
+ <b>GROSS PROFIT TARGET PER STAFF</b><br>
+ Doctor: ${fmt(perHead(g,doctorPct.value,doctorQty.value))}<br>
+ CCS: ${fmt(perHead(g,ccsPct.value,ccsQty.value))}<br>
+ CRO: ${fmt(perHead(g,croPct.value,croQty.value))}<br>
+ Cashier: ${fmt(perHead(g,cashierPct.value,cashierQty.value))}<br>
+ Stock Clerk: ${fmt(perHead(g,stockPct.value,stockQty.value))}<br><br>
+<b>CURRENT ROW RS vs LY:</b> ${fmt(activeRow.rs)} | <b>RS LY:</b> ${fmt(activeRow.rsLY)} | <b>Growth:</b> ${rowRsGrowth.toFixed(2)}%<br>
+<b>CURRENT ROW GP vs LY:</b> ${fmt(activeRow.gp)} | <b>GP LY:</b> ${fmt(activeRow.gpLY)} | <b>GP Growth:</b> ${rowGpGrowth.toFixed(2)}%<br><br>
+<b>RS % Achievement vs Month End Quota:</b> ${rsAch.toFixed(2)}%<br>
+<b>GP % Achievement vs Month End Quota:</b> ${gpAch.toFixed(2)}%`;
+}
+function rawEdit(el){el.value=el.value.replace(/,/g,'');}
+function headerVal(el,id){let clean=String(el.value).replace(/,/g,'');document.getElementById(id).value=fmt(Number(clean)||0);recomputeAll();}
+function updateVal(i,key,val,el){let clean=String(val).replace(/,/g,'');data[i][key]=Number(clean)||0;if(el)el.value=fmt(data[i][key]);recomputeAll();}
+function fmt(n){return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function saveAll(){['quotaInput','gpQuotaInput','daysInput','doctorQty','doctorPct','ccsQty','ccsPct','croQty','croPct','cashierQty','cashierPct','stockQty','stockPct'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value));localStorage.setItem('dsrManualData',JSON.stringify(data));saveMeta();}
+function loadAll(){['monthInput','yearInput','quotaInput','gpQuotaInput','daysInput','doctorQty','doctorPct','ccsQty','ccsPct','croQty','croPct','cashierQty','cashierPct','stockQty','stockPct'].forEach(id=>{if(localStorage.getItem(id)!=null)document.getElementById(id).value=localStorage.getItem(id);});quotaInput.value=fmt(String(quotaInput.value||1000000).replace(/,/g,''));
+gpQuotaInput.value=fmt(String(gpQuotaInput.value||800000).replace(/,/g,''));let saved=localStorage.getItem('dsrManualData');if(saved){data=JSON.parse(saved);recomputeAll();}else generateRows();}
+function backup(){
+ const pkg = {
+   version:'DSR_V2_FULL',
+   monthInput:monthInput.value,
+   yearInput:yearInput.value,
+   daysInput:daysInput.value,
+   quotaInput:quotaInput.value,
+   gpQuotaInput:gpQuotaInput.value,
+
+   doctorQty:doctorQty.value,
+   doctorPct:doctorPct.value,
+   ccsQty:ccsQty.value,
+   ccsPct:ccsPct.value,
+   croQty:croQty.value,
+   croPct:croPct.value,
+   cashierQty:cashierQty.value,
+   cashierPct:cashierPct.value,
+   stockQty:stockQty.value,
+   stockPct:stockPct.value,
+
+   dsrManualData: data
+ };
+
+ const blob = new Blob([JSON.stringify(pkg)],{type:'application/json'});
+ const a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);
+ a.download='dsr_full_backup_v2_complete.dsr';
+ a.click();
+}
+
+function restoreData(){
+ const file = restoreFile.files[0];
+ if(!file){alert('Select backup file first');return;}
+
+ let ask = confirm('RESTORE BACKUP?\n\nThis will overwrite all current encoded data and settings.');
+ if(!ask){return;}
+
+ const reader = new FileReader();
+ reader.onload = function(e){
+   let pkg = JSON.parse(e.target.result);
+
+   let ask2 = confirm('FINAL CONFIRMATION:\n\nProceed restoring backup file? Current data cannot be undone.');
+   if(!ask2){return;}
+
+   monthInput.value = pkg.monthInput || 'April';
+   yearInput.value = pkg.yearInput || '2026';
+   daysInput.value = pkg.daysInput || 31;
+   quotaInput.value = pkg.quotaInput || '0';
+   gpQuotaInput.value = pkg.gpQuotaInput || '0';
+
+   doctorQty.value = pkg.doctorQty || 1;
+   doctorPct.value = pkg.doctorPct || 60;
+   ccsQty.value = pkg.ccsQty || 1;
+   ccsPct.value = pkg.ccsPct || 25;
+   croQty.value = pkg.croQty || 1;
+   croPct.value = pkg.croPct || 10;
+   cashierQty.value = pkg.cashierQty || 1;
+   cashierPct.value = pkg.cashierPct || 5;
+   stockQty.value = pkg.stockQty || 1;
+   stockPct.value = pkg.stockPct || 5;
+
+   data = pkg.dsrManualData || [];
+
+   recomputeAll();
+   alert('Backup restored successfully');
+ };
+ reader.readAsText(file);
+}
+
+
+function resetData(){
+
+ let ask = confirm('RESET ALL DATA?\n\nThis will permanently delete all encoded sales, quotas, and personnel settings.');
+ if(!ask){return;}
+
+ let ask2 = confirm('FINAL WARNING:\n\nAre you absolutely sure you want to erase everything?');
+ if(!ask2){return;}
+
+ localStorage.clear();
+
+ monthInput.value='April';
+ yearInput.value='2026';
+ daysInput.value=31;
+ quotaInput.value='1,000,000.00';
+ gpQuotaInput.value='800,000.00';
+
+ doctorQty.value=1;
+ doctorPct.value=60;
+ ccsQty.value=1;
+ ccsPct.value=25;
+ croQty.value=1;
+ croPct.value=10;
+ cashierQty.value=1;
+ cashierPct.value=5;
+ stockQty.value=1;
+ stockPct.value=5;
+
+ data=[];
+
+ generateRows();
+
+ alert('All data successfully reset');
+}
+
+function downloadXLS(){
+ let clone = document.getElementById('tbl').cloneNode(true);
+ clone.querySelectorAll('input').forEach(inp=>{
+   let td = inp.parentElement;
+   td.innerHTML = inp.value;
+ });
+ let table = clone.outerHTML;
+
+ let html = `
+ <html xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns="http://www.w3.org/TR/REC-html40">
+ <head><meta charset="UTF-8"></head>
+ <body>${table}</body></html>`;
+
+ let blob = new Blob([html],{type:'application/vnd.ms-excel'});
+ let a = document.createElement('a');
+ a.href = URL.createObjectURL(blob);
+ a.download = 'Store_Performance_'+monthInput.value+'_'+yearInput.value+'.xls';
+ a.click();
+}
+
+loadAll();openTab('master');
+</script>
+
+<script>
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.register('./service-worker.js')
+ .then(()=>console.log('SW Registered'));
+}
+</script>
+
+</body>
+</html>

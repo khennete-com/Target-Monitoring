@@ -1,4 +1,4 @@
-const CACHE_NAME = "Quotav10";
+const CACHE_NAME = "Quotav11";
 
 const FILES_TO_CACHE = [
   "./",

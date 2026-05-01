@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dsr-performance-cache-v2';
+const CACHE_NAME = 'dsr-performance-cache-v3';
 const FILES_TO_CACHE = [
   "./",
   "./index.html",

@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#000000">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="application-name" content="DSR Store Performance Manual V2">
+<meta name="apple-mobile-web-app-title" content="DSR Performance">
+<meta name="msapplication-TileColor" content="#000000">
  
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -450,10 +453,20 @@ loadAll();openTab('master');
 </script>
  <script>
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js')
-      .then(reg => console.log('SW registered', reg))
-      .catch(err => console.log('SW failed', err));
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+      console.log('SW registered', reg);
+
+      window.deferredPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        window.deferredPrompt = e;
+        console.log('PWA install available');
+      });
+    } catch (err) {
+      console.log('SW failed', err);
+    }
   });
 }
  </script>

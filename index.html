@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#222222">
-<link rel="apple-touch-icon" href="icon-192.png">
 <title>DSR Store Performance Manual V2</title>
 <style>
 body{font-family:Arial;margin:0;background:#f5f5f5}
@@ -38,6 +35,7 @@ input[type=number],input[type=text]{width:100%;box-sizing:border-box;text-align:
 <body>
 <div class="nav">
 <button onclick="openTab('master')">Master Data</button>
+<button onclick="openTab('staff')">Staff Quota</button>
 <button onclick="openTab('system')">System</button>
 </div>
 
@@ -70,6 +68,7 @@ input[type=number],input[type=text]{width:100%;box-sizing:border-box;text-align:
 </table>
 </div>
 
+<button class="toggleBtn" onclick="generateStaffQuotaTable()">REFRESH DAILY STAFF QUOTA</button>
 <button class="toggleBtn" onclick="downloadXLS()">DOWNLOAD</button>
 
 <div class="table-container">
@@ -81,6 +80,43 @@ input[type=number],input[type=text]{width:100%;box-sizing:border-box;text-align:
 </div>
 <div id="summary" style="margin-top:15px;background:#fff;padding:10px;border:1px solid #999;font-size:13px"></div>
 </div>
+
+<div id="staff" class="tab">
+<button class="toggleBtn" onclick="generateStaffQuotaTable()">REFRESH DAILY STAFF QUOTA</button>
+<div class="table-container">
+<button class="toggleBtn" onclick="toggleEmpMaster()">SHOW / HIDE EMPLOYEE LIST</button>
+<div id="empMaster" style="display:none;background:#fff;padding:10px;border:1px solid #999;margin-bottom:10px">
+<table id="empTbl"><thead><tr><th>Position</th><th>Employee Names (comma separated editable)</th></tr></thead>
+<tbody>
+<tr><td>Doctor</td><td><input type="text" id="empDoctor" value="Doctor 1"></td></tr>
+<tr><td>CCS</td><td><input type="text" id="empCCS" value="CCS 1"></td></tr>
+<tr><td>CRO</td><td><input type="text" id="empCRO" value="CRO 1"></td></tr>
+<tr><td>Cashier</td><td><input type="text" id="empCashier" value="Cashier 1"></td></tr>
+<tr><td>Stock Clerk</td><td><input type="text" id="empStock" value="Stock Clerk 1"></td></tr>
+</tbody></table>
+<button class="toggleBtn" onclick="saveEmpMaster();generateStaffQuotaTable()">SAVE EMPLOYEE LIST</button>
+</div>
+<h3>TABLE 1 - DAILY STAFF QUOTA</h3>
+<table id="staffTbl1">
+<thead><tr><th>Series</th><th>Name</th><th>Position</th><th>Quota</th><th>Actual</th><th>Variance</th></tr></thead>
+<tbody></tbody>
+</table><button class="toggleBtn" onclick="postDailyStaffQuota()">MANUAL POST TABLE 1 TO TABLE 2</button>
+
+<h3 style="margin-top:20px;">TABLE 2 - STAFF QUOTA HISTORY</h3>
+<table id="staffTbl2">
+<thead><tr><th>Series</th><th>Name</th><th>Position</th><th>Quota</th><th>Actual</th><th>Variance</th></tr></thead>
+<tbody></tbody>
+</table>
+
+<h3 style="margin-top:20px;">TABLE 3 - STAFF CUMULATIVE SUMMARY</h3>
+<table id="staffTbl3">
+<thead><tr><th>Name</th><th>Position</th><th>Quota</th><th>Actual</th><th>Variance</th><th>Achievement %</th></tr></thead>
+<tbody></tbody>
+</table>
+</div>
+</div>
+
+
 <div id="system" class="tab">
 <button onclick="backup()">Backup</button>
 <button onclick="restoreData()">Restore</button>
@@ -163,7 +199,7 @@ function updateVal(i,key,val,el){let clean=String(val).replace(/,/g,'');data[i][
 function fmt(n){return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function saveAll(){['quotaInput','gpQuotaInput','daysInput','doctorQty','doctorPct','ccsQty','ccsPct','croQty','croPct','cashierQty','cashierPct','stockQty','stockPct'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value));localStorage.setItem('dsrManualData',JSON.stringify(data));saveMeta();}
 function loadAll(){['monthInput','yearInput','quotaInput','gpQuotaInput','daysInput','doctorQty','doctorPct','ccsQty','ccsPct','croQty','croPct','cashierQty','cashierPct','stockQty','stockPct'].forEach(id=>{if(localStorage.getItem(id)!=null)document.getElementById(id).value=localStorage.getItem(id);});quotaInput.value=fmt(String(quotaInput.value||1000000).replace(/,/g,''));
-gpQuotaInput.value=fmt(String(gpQuotaInput.value||800000).replace(/,/g,''));let saved=localStorage.getItem('dsrManualData');if(saved){data=JSON.parse(saved);recomputeAll();}else generateRows();}
+gpQuotaInput.value=fmt(String(gpQuotaInput.value||800000).replace(/,/g,''));let saved=localStorage.getItem('dsrManualData');if(saved){data=JSON.parse(saved);recomputeAll();}else generateRows(); staffDaily=JSON.parse(localStorage.getItem('staffDaily')||'[]'); staffHistory=JSON.parse(localStorage.getItem('staffHistory')||'[]'); renderStaffTables(); if(staffDaily.length===0)generateStaffQuotaTable();}
 function backup(){
  const pkg = {
    version:'DSR_V2_FULL',
@@ -184,7 +220,14 @@ function backup(){
    stockQty:stockQty.value,
    stockPct:stockPct.value,
 
-   dsrManualData: data
+   dsrManualData: data,
+   staffDaily: staffDaily,
+   staffHistory: staffHistory,
+   empDoctor: localStorage.getItem('empDoctor')||'',
+   empCCS: localStorage.getItem('empCCS')||'',
+   empCRO: localStorage.getItem('empCRO')||'',
+   empCashier: localStorage.getItem('empCashier')||'',
+   empStock: localStorage.getItem('empStock')||''
  };
 
  const blob = new Blob([JSON.stringify(pkg)],{type:'application/json'});
@@ -226,8 +269,16 @@ function restoreData(){
    stockPct.value = pkg.stockPct || 5;
 
    data = pkg.dsrManualData || [];
+   staffDaily = pkg.staffDaily || [];
+   staffHistory = pkg.staffHistory || [];
+   localStorage.setItem('empDoctor',pkg.empDoctor||'');
+   localStorage.setItem('empCCS',pkg.empCCS||'');
+   localStorage.setItem('empCRO',pkg.empCRO||'');
+   localStorage.setItem('empCashier',pkg.empCashier||'');
+   localStorage.setItem('empStock',pkg.empStock||'');
 
    recomputeAll();
+   renderStaffTables();
    alert('Backup restored successfully');
  };
  reader.readAsText(file);
@@ -262,11 +313,110 @@ function resetData(){
  stockPct.value=5;
 
  data=[];
+ staffDaily=[];
+ staffHistory=[];
+ ['empDoctor','empCCS','empCRO','empCashier','empStock'].forEach(k=>localStorage.removeItem(k));
 
  generateRows();
+ renderStaffTables();
 
  alert('All data successfully reset');
 }
+
+
+let staffDaily=[], staffHistory=[];
+
+
+function toggleEmpMaster(){ let p=document.getElementById('empMaster'); p.style.display=p.style.display==='none'?'block':'none';}
+function saveEmpMaster(){['empDoctor','empCCS','empCRO','empCashier','empStock'].forEach(id=>localStorage.setItem(id,document.getElementById(id).value));}
+
+function getEmpNames(pos){
+ let map={
+  'Doctor':(localStorage.getItem('empDoctor')||'Doctor 1').split(','),
+  'CCS':(localStorage.getItem('empCCS')||'CCS 1').split(','),
+  'CRO':(localStorage.getItem('empCRO')||'CRO 1').split(','),
+  'Cashier':(localStorage.getItem('empCashier')||'Cashier 1').split(','),
+  'Stock Clerk':(localStorage.getItem('empStock')||'Stock Clerk 1').split(',')
+ };
+ return map[pos].map(x=>x.trim()).filter(Boolean);
+}
+
+function generateStaffQuotaTable(){
+ 
+let lastEncodedIndex=data.map((r,idx)=>({r,idx}))
+.filter(x=>Number(x.r.rs)>0||Number(x.r.gp)>0||Number(x.r.ns)>0)
+.map(x=>x.idx).pop();
+let nextSeries = lastEncodedIndex!=null&&data[lastEncodedIndex+1] ? data[lastEncodedIndex+1].series : data[0].series;
+
+ let s=(data.find((r,idx)=>idx===data.map((r2,i)=>({r2,i})).filter(x=>Number(x.r2.rs)>0||Number(x.r2.gp)>0||Number(x.r2.ns)>0).map(x=>x.i).pop()+1)?.targetSales||data[0]?.targetSales||0)*1.12;
+ function perHead(target,pct,qty){return ((target*(pct/100))/(qty||1));}
+ staffDaily=[];
+ let positions = [
+   ['Doctor', Number(doctorQty.value), perHead(s,doctorPct.value,doctorQty.value)],
+   ['CCS', Number(ccsQty.value), perHead(s,ccsPct.value,ccsQty.value)],
+   ['CRO', Number(croQty.value), perHead(s,croPct.value,croQty.value)],
+   ['Cashier', Number(cashierQty.value), perHead(s,cashierPct.value,cashierQty.value)],
+   ['Stock Clerk', Number(stockQty.value), perHead(s,stockPct.value,stockQty.value)]
+ ];
+ positions.forEach(p=>{
+   let emps=getEmpNames(p[0]);
+   let qty = Math.max(p[1], emps.length);
+   for(let i=1;i<=qty;i++){
+      let nm=emps[i-1]||'';
+      staffDaily.push({series:nextSeries,name:nm,position:p[0],quota:p[2],actual:0,variance:0});
+   }
+ });
+ renderStaffTables(); saveStaff();
+}
+
+function updateStaffName(i,val){staffDaily[i].name=val; saveStaff();}
+function updateStaffActual(i,val){staffDaily[i].actual=Number(String(val).replace(/,/g,''))||0; staffDaily[i].variance=staffDaily[i].actual-staffDaily[i].quota; renderStaffTables(); saveStaff();}
+
+function postDailyStaffQuota(){
+ if(staffDaily.length===0){generateStaffQuotaTable();}
+ if(staffDaily.every(r=>Number(r.actual||0)===0)){
+   let go=confirm('Actual values are all zero. Continue posting?');
+   if(!go){return;}
+ }
+ staffDaily.forEach(r=>staffHistory.push({...r}));
+ renderStaffTables();
+ computeStaffSummary();
+ saveStaff();
+ alert('Daily staff quota posted to history successfully');
+ generateStaffQuotaTable();
+}
+
+function computeStaffSummary(){
+ let map={};
+ staffHistory.forEach(r=>{
+   let k=r.name+'|'+r.position;
+   if(!map[k]) map[k]={name:r.name,position:r.position,quota:0,actual:0,variance:0};
+   map[k].quota+=Number(r.quota)||0;
+   map[k].actual+=Number(r.actual)||0;
+   map[k].variance=map[k].actual-map[k].quota;
+ });
+ let tbody=document.querySelector('#staffTbl3 tbody'); tbody.innerHTML='';
+ Object.values(map).forEach(r=>{
+   let ach = r.quota?((r.actual/r.quota)*100):0;
+   tbody.innerHTML += `<tr>
+   <td>${r.name}</td><td>${r.position}</td><td>${fmt(r.quota)}</td><td>${fmt(r.actual)}</td>
+   <td style="color:${r.variance<0?'red':'black'}">${fmt(r.variance)}</td><td>${ach.toFixed(2)}%</td></tr>`;
+ });
+}
+
+function renderStaffTables(){
+ let b1=document.querySelector('#staffTbl1 tbody'); b1.innerHTML='';
+ staffDaily.forEach((r,i)=>{
+   b1.innerHTML += `<tr><td>${r.series}</td><td><select onchange='updateStaffName(${i},this.value)'>${getEmpNames(r.position).map(n=>`<option ${n===r.name?'selected':''}>${n}</option>`).join('')}</select></td><td>${r.position}</td><td>${fmt(r.quota)}</td><td><input type='text' value='${fmt(r.actual)}' onfocus='rawEdit(this)' onchange='updateStaffActual(${i},this.value)'></td><td style="color:${r.variance<0?'red':'black'}">${fmt(r.variance)}</td></tr>`;
+ });
+ let b2=document.querySelector('#staffTbl2 tbody'); b2.innerHTML='';
+ staffHistory.forEach(r=>{
+   b2.innerHTML += `<tr><td>${r.series}</td><td>${r.name}</td><td>${r.position}</td><td>${fmt(r.quota)}</td><td>${fmt(r.actual)}</td><td style="color:${r.variance<0?'red':'black'}">${fmt(r.variance)}</td></tr>`;
+ });
+ computeStaffSummary();
+}
+
+function saveStaff(){localStorage.setItem('staffDaily',JSON.stringify(staffDaily));localStorage.setItem('staffHistory',JSON.stringify(staffHistory));}
 
 function downloadXLS(){
  let clone = document.getElementById('tbl').cloneNode(true);
@@ -292,13 +442,5 @@ function downloadXLS(){
 
 loadAll();openTab('master');
 </script>
-
-<script>
-if('serviceWorker' in navigator){
- navigator.serviceWorker.register('./service-worker.js')
- .then(()=>console.log('SW Registered'));
-}
-</script>
-
 </body>
 </html>
